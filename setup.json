@@ -1,0 +1,14 @@
+{
+  "width": 500,
+  "height": 500,
+  "source_directory": "Photos",
+  "destination_directory": "Resized",
+  "compression_quality": 85,
+  "watermark" : "watermark.png",
+  "source_watermark" : "Photos",
+  "watermark_width" : 100,
+  "watermark_position" : "bottom-left", 
+  "watermark_transparency" : "0.1",
+  "imageServerPort" : "8888",
+  "imageServerFile" : "gallery.html"
+}
