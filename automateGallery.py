@@ -1,12 +1,30 @@
 import os
-from tqdm import tqdm
+from jinja2 import Template
+import datetime
 
-def generate_html_gallery(directory, output_file="gallery.html"):
-    # Get all image files recursively in the specified directory
-    image_files = [f for f in os.listdir(directory) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
+def get_image_files(directory):
+    image_files = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                image_files.append(os.path.join(root, file))
+    return image_files
 
-    # Create the HTML content
-    html_content = """
+def generate_html(image_dir):
+    # Get the list of image files in the specified directory and its subdirectories
+    image_files = get_image_files(image_dir)
+
+    # Order the images based on creation time
+    image_files.sort(key=lambda x: os.path.getctime(x))
+
+    # Get the current date and time
+    current_datetime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Display loader while processing images
+    print("Generating HTML document. Please wait...")
+
+    # Read the HTML template
+    template_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -15,123 +33,179 @@ def generate_html_gallery(directory, output_file="gallery.html"):
         <title>Image Gallery</title>
         <style>
             body {
+                font-family: Arial, sans-serif;
                 margin: 0;
                 padding: 0;
-                background-color: #000;
+                background-color: #f4f4f4;
             }
-            #gallery-container {
+
+            .gallery {
                 display: flex;
                 flex-wrap: wrap;
-                justify-content: space-around;
-                align-items: flex-start;
-                padding: 20px;
+                justify-content: flex-start; /* Align elements to the left */
+                margin: 20px;
             }
-            .gallery-item {
-                position: relative;
-                flex: 0 0 30%;
+
+            .gallery div {
+                width: 200px;
+                height: 200px;
+                overflow: hidden;
                 margin: 10px;
+                position: relative;
             }
-            .gallery-item img {
+
+            .gallery img {
                 width: 100%;
-                height: auto;
+                height: 100%;
+                object-fit: cover;
                 cursor: pointer;
+                transition: transform 0.3s;
             }
-            #modal {
+
+            .gallery img:hover {
+                transform: scale(1.1);
+            }
+
+            .loader {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                display: none;
+            }
+
+            .modal {
                 display: none;
                 position: fixed;
                 top: 0;
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background-color: rgba(0, 0, 0, 0.8);
-                z-index: 1;
+                background-color: rgba(0, 0, 0, 0.9);
                 justify-content: center;
                 align-items: center;
             }
-            #modal img {
-                max-width: 80%;
-                max-height: 80%;
-                width: auto;
+
+            .modal img {
+                width: 80%;
+                height: auto;
+                max-width: 800px;
+                cursor: pointer;
+                transition: transform 0.3s;
+            }
+
+            .modal img:hover {
+                transform: scale(1.1);
+            }
+
+            .close {
+                position: absolute;
+                top: 15px;
+                right: 15px;
+                color: #fff;
+                font-size: 30px;
+                cursor: pointer;
+            }
+
+            .prev, .next {
+                position: absolute;
+                top: 50%;
+                font-size: 20px;
+                color: #fff;
+                cursor: pointer;
+                transform: translateY(-50%);
+            }
+
+            .prev {
+                left: 15px;
+            }
+
+            .next {
+                right: 15px;
             }
         </style>
     </head>
     <body>
-        <div id="gallery-container">
-    """
 
-    # Add image elements to the HTML content
-    for i, image_file in enumerate(tqdm(image_files, desc="Creating HTML Gallery", unit="image")):
-        image_path = os.path.join(directory, image_file)
-        html_content += f'<div class="gallery-item" onclick="openModal(\'{image_path}\')" tabindex="{i + 1}" onkeydown="handleImageNavigation(event)"><img src="{image_path}" alt="{image_file}"></div>\n'
-
-    # Close the HTML content
-    html_content += """
+    <div class="gallery" id="imageGallery">
+        {% for image in images %}
+        <div onclick="openModal('{{ image }}')">
+            <img src="{{ image }}" alt="Image {{ loop.index }}">
         </div>
-        <div id="modal" onclick="closeModal()">
-            <img id="modal-img" alt="Modal Image">
-        </div>
-        <script>
-            var currentIndex = 0;
-            var images = document.getElementsByClassName('gallery-item');
-            var modalImg = document.getElementById('modal-img');
-            var modal = document.getElementById('modal');
+        {% endfor %}
+    </div>
 
-            function openModal(imagePath) {
-                modalImg.src = imagePath;
-                modal.style.display = 'flex';
-                currentIndex = Array.from(images).findIndex(item => item.contains(document.activeElement));
-                document.addEventListener('keydown', handleKeyPress);
+    <div class="loader" id="loader">Loading...</div>
+
+    <div id="myModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <span class="prev" onclick="changeImage(-1)">&#10094;</span>
+        <span class="next" onclick="changeImage(1)">&#10095;</span>
+        <img id="modalImage" class="modal-content">
+    </div>
+
+    <script>
+        let currentImageIndex = 0;
+        const images = [
+            {% for image in images %}
+            '{{ image }}',
+            {% endfor %}
+        ];
+
+        function openModal(imageSrc) {
+            currentImageIndex = images.indexOf(imageSrc);
+            document.getElementById('modalImage').src = imageSrc;
+            document.querySelector('.modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.querySelector('.modal').style.display = 'none';
+        }
+
+        function changeImage(direction) {
+            currentImageIndex += direction;
+            if (currentImageIndex < 0) {
+                currentImageIndex = images.length - 1;
+            } else if (currentImageIndex >= images.length) {
+                currentImageIndex = 0;
             }
+            document.getElementById('modalImage').src = images[currentImageIndex];
+        }
 
-            function closeModal() {
-                modal.style.display = 'none';
-                document.removeEventListener('keydown', handleKeyPress);
-                currentIndex = 0;  // Reset currentIndex when closing the modal
-            }
-
-            function handleKeyPress(event) {
-                if (event.key === 'Escape') {
-                    closeModal();
-                } else if (event.key === 'ArrowLeft') {
-                    navigate('prev');
+        // Keyboard navigation
+        document.addEventListener('keydown', function(event) {
+            if (document.querySelector('.modal').style.display === 'flex') {
+                if (event.key === 'ArrowLeft') {
+                    changeImage(-1);
                 } else if (event.key === 'ArrowRight') {
-                    navigate('next');
+                    changeImage(1);
+                } else if (event.key === 'Escape') {
+                    closeModal();
                 }
             }
+        });
 
-            function handleImageNavigation(event) {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                    navigate(event.key === 'ArrowLeft' ? 'prev' : 'next');
-                    event.preventDefault();
-                }
-            }
+        // Hide the loader once the images are loaded
+        window.onload = function() {
+            document.getElementById('loader').style.display = 'none';
+        };
+    </script>
 
-            function navigate(direction) {
-                if (direction === 'prev') {
-                    currentIndex = (currentIndex - 1 + images.length) % images.length;
-                } else if (direction === 'next') {
-                    currentIndex = (currentIndex + 1) % images.length;
-                }
-
-                modalImg.src = images[currentIndex].getElementsByTagName('img')[0].src;
-            }
-        </script>
     </body>
     </html>
     """
 
-    # Write the HTML content to the output file
-    with open(output_file, "w") as html_file:
-        html_file.write(html_content)
+    # Render the template with the image files and current date/time
+    rendered_template = Template(template_content).render(images=image_files)
 
-if __name__ == "__main__":
-    # Specify the source directory (e.g., "Photos")
-    source_directory = "Photos"
-    
-    # Specify the output HTML file
-    output_html_file = "gallery.html"
+    # Write the generated HTML to a new file
+    output_filename = f"gallery-{current_datetime}.html"
+    with open(output_filename, 'w') as output_file:
+        output_file.write(rendered_template)
 
-    # Generate the HTML gallery
-    generate_html_gallery(source_directory, output_html_file)
+    print(f"HTML document '{output_filename}' generated successfully.")
 
-    print(f"Image gallery generated successfully. Open '{output_html_file}' in a web browser.")
+# Specify the directory containing the images
+image_dir = "fotos"
+
+generate_html(image_dir)
